@@ -1,8 +1,8 @@
 // Min Form service worker.
 // Appens filer sparas för att fungera utan internet. Användarens data ligger
 // i webbläsarens lokala lagring och påverkas aldrig av den här filen.
-const CACHE = "minform-app-3.8.1";
-const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./exercise-info.js", "./livsmedel.js",
+const CACHE = "minform-app-3.8.2";
+const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./exercise-info.js", "./exercise-info-2.js", "./livsmedel.js",
   "./img/Band_Assisted_Pull-Up/0.webp",
   "./img/Band_Assisted_Pull-Up/1.webp",
   "./img/Barbell_Bench_Press_-_Medium_Grip/0.webp",
