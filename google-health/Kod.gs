@@ -1,4 +1,4 @@
-// Min Form – klockdata från Google Health API (version 2)
+// Min Form – klockdata från Google Health API (version 3 – med steg)
 // Kör i ditt eget Google-konto. Hämtar vilopuls, HRV, sömn och träningspass
 // och lämnar ut dem till Min Form bara om rätt nyckel skickas med.
 // Skriptet loggar in med en egen OAuth-klient som BARA har läsbehörighet
@@ -133,6 +133,7 @@ function dstr_(d) {
   if (d.year) return d.year + '-' + pad_(d.month) + '-' + pad_(d.day);
   return null;
 }
+function civ_(ymd) { var a = ymd.split('-'); return { date: { year: +a[0], month: +a[1], day: +a[2] }, time: { hours: 0, minutes: 0, seconds: 0 } }; }
 function num_(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : null; }
 
 function api_(type, filter) {
@@ -181,6 +182,19 @@ function collect(days) {
       var d = dstr_(x.interval.civilEndTime) || ymd_(new Date(x.interval.endTime));
       var m = num_(x.summary && x.summary.minutesAsleep);
       if (d && m) { var o = day(d); o.sleepMin = Math.max(o.sleepMin || 0, Math.round(m)); }
+    });
+  });
+  tryit('steg', function () {
+    var body = { range: { start: civ_(s), end: civ_(e) }, windowSizeDays: 1, pageSize: 100 };
+    var r = UrlFetchApp.fetch('https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp', {
+      method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
+      headers: { Authorization: 'Bearer ' + accessToken_() }, muteHttpExceptions: true
+    });
+    if (r.getResponseCode() !== 200) throw new Error(r.getResponseCode() + ' ' + r.getContentText().slice(0, 400));
+    (JSON.parse(r.getContentText()).rollupDataPoints || []).forEach(function (x) {
+      var d = dstr_(x.civilStartTime); var st = x.steps || {};
+      var v = num_(st.countSum != null ? st.countSum : st.count_sum);
+      if (d && v) day(d).steps = Math.round(v);
     });
   });
   tryit('pass', function () {
