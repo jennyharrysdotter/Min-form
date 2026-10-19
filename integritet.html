@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Min Form – integritet</title>
+<style>
+:root{--bg:#f6f8f7;--ink:#1d2b24;--muted:#5d7268;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#111714;--ink:#e6efe9;--muted:#9db1a7;--card:#1a231f}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px}
+.card{background:var(--card);border-radius:16px;padding:20px 20px 8px;margin:16px 0}
+h1{font-size:26px;margin:8px 0}h2{font-size:18px;margin:0 0 8px}p,li{color:var(--ink)}small{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<h1>Min Form – integritet</h1>
+<small>Gäller appen Min Form och skriptet "Min Form klocka". Senast uppdaterad 19 oktober 2026.</small>
+<div class="card"><h2>Kort sagt</h2>
+<p>Min Form är en privat app för träning, kost och hälsa. Dina uppgifter sparas i din egen telefon och i ditt eget Google-konto. De säljs inte, delas inte med andra och används inte för reklam.</p></div>
+<div class="card"><h2>Vad som läses från Google Health</h2>
+<p>Om du kopplar klockdata läser skriptet "Min Form klocka", som körs i ditt eget Google-konto, följande med enbart läsrätt:</p>
+<ul><li>vilopuls och hjärtfrekvensvariabilitet (HRV) per dag</li><li>sömn (längd)</li><li>träningspass (typ, tid, distans, kalorier, puls, steg)</li></ul>
+<p>Uppgifterna skickas bara till din Min Form-app när den anropar skriptet med din hemliga nyckel. Skriptet sparar inga hälsodata utöver en kort tillfällig cache (högst 10 minuter) i ditt eget Google-konto.</p></div>
+<div class="card"><h2>Var data sparas</h2>
+<p>All data i Min Form sparas lokalt i webbläsaren på din enhet. Säkerhetskopior sparas bara där du själv väljer, till exempel i din Google Drive. Nycklar och adresser till kopplingar sparas bara i telefonen och följer inte med i säkerhetskopior.</p></div>
+<div class="card"><h2>AI-funktioner</h2>
+<p>Om du lägger in en egen AI-nyckel skickas den information som behövs för en fråga (till exempel träningshistorik) till den AI-tjänst du själv valt, med din egen nyckel.</p></div>
+<div class="card"><h2>Ta bort åtkomst</h2>
+<p>Du kan när som helst ta bort kopplingen i Min Form (Mer → Klockdata från Google → Ta bort) och återkalla skriptets åtkomst på <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p></div>
+<div class="card"><h2>Kontakt</h2>
+<p>Frågor: jenny.harrysdotter@gmail.com</p></div>
+</main>
+</body>
+</html>
