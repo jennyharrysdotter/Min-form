@@ -1,24 +1,103 @@
-// Min Form – klockdata från Google Health API
+// Min Form – klockdata från Google Health API (version 2)
 // Kör i ditt eget Google-konto. Hämtar vilopuls, HRV, sömn och träningspass
 // och lämnar ut dem till Min Form bara om rätt nyckel skickas med.
-// Inga uppgifter sparas någon annanstans än i ditt Google-konto.
+// Skriptet loggar in med en egen OAuth-klient som BARA har läsbehörighet
+// till Google Health (det kräver Google Health API).
+//
+// Förberedelse: lägg in två skriptegenskaper under Projektinställningar:
+//   CLIENT_ID      – klient-id från Google Cloud
+//   CLIENT_SECRET  – klienthemlighet från Google Cloud
 
 var DAYS_DEFAULT = 14;
+var SCOPES = [
+  'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
+  'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
+  'https://www.googleapis.com/auth/googlehealth.sleep.readonly'
+].join(' ');
 
-// 1) Kör den här en gång från editorn (välj "setup" och tryck Kör).
-//    Den skapar din hemliga nyckel och testar att hämta data.
+// 1) Kör "setup". Första gången skriver loggen en länk som du öppnar i Chrome
+//    för att godkänna. Kör sedan "setup" igen – då skrivs nyckeln och ett test.
 function setup() {
   var p = PropertiesService.getScriptProperties();
   var k = p.getProperty('KEY');
-  if (!k) {
-    k = Utilities.getUuid().replace(/-/g, '').slice(0, 24);
-    p.setProperty('KEY', k);
+  if (!k) { k = Utilities.getUuid().replace(/-/g, '').slice(0, 24); p.setProperty('KEY', k); }
+  Logger.log('OMDIRIGERINGS-URI (till Google Cloud): ' + redirectUri_());
+  if (!p.getProperty('CLIENT_ID') || !p.getProperty('CLIENT_SECRET')) {
+    Logger.log('SAKNAS: lägg in skriptegenskaperna CLIENT_ID och CLIENT_SECRET under Projektinställningar och kör setup igen.');
+    return;
+  }
+  if (!p.getProperty('REFRESH_TOKEN')) {
+    Logger.log('GODKÄNN: öppna den här länken i Chrome och godkänn, kör sedan setup igen:');
+    Logger.log(authUrl_());
+    return;
   }
   Logger.log('DIN NYCKEL: ' + k);
   var r = collect(3);
   Logger.log('Test: ' + Object.keys(r.days).length + ' dagar, ' + r.exercises.length + ' pass.');
   if (r.errors.length) Logger.log('Fel: ' + r.errors.join(' | '));
   Logger.log(JSON.stringify(r).slice(0, 1500));
+}
+
+// Kör om du vill börja om med godkännandet.
+function resetAuth() {
+  var p = PropertiesService.getScriptProperties();
+  p.deleteProperty('REFRESH_TOKEN');
+  CacheService.getScriptCache().remove('AT');
+  Logger.log('Godkännandet är nollställt. Kör setup igen.');
+}
+
+function redirectUri_() {
+  return 'https://script.google.com/macros/d/' + ScriptApp.getScriptId() + '/usercallback';
+}
+
+function authUrl_() {
+  var p = PropertiesService.getScriptProperties();
+  var state = ScriptApp.newStateToken().withMethod('authCallback').withTimeout(3600).createToken();
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + [
+    'client_id=' + encodeURIComponent(p.getProperty('CLIENT_ID')),
+    'redirect_uri=' + encodeURIComponent(redirectUri_()),
+    'response_type=code',
+    'scope=' + encodeURIComponent(SCOPES),
+    'access_type=offline',
+    'prompt=consent',
+    'include_granted_scopes=false',
+    'state=' + encodeURIComponent(state)
+  ].join('&');
+}
+
+function authCallback(request) {
+  var code = request && request.parameter && request.parameter.code;
+  if (!code) return HtmlService.createHtmlOutput('<h2>Ingen kod mottogs.</h2><p>' + (request.parameter.error || '') + '</p>');
+  try {
+    var j = tokenRequest_({ code: code, grant_type: 'authorization_code', redirect_uri: redirectUri_() });
+    if (!j.refresh_token) throw new Error('Google skickade ingen refresh_token. Kör resetAuth och försök igen.');
+    PropertiesService.getScriptProperties().setProperty('REFRESH_TOKEN', j.refresh_token);
+    if (j.access_token) CacheService.getScriptCache().put('AT', j.access_token, Math.max(60, (j.expires_in || 3600) - 120));
+    return HtmlService.createHtmlOutput('<h2 style="font-family:sans-serif">✓ Klart!</h2><p style="font-family:sans-serif">Gå tillbaka till skriptet och kör <b>setup</b> igen.</p>');
+  } catch (e) {
+    return HtmlService.createHtmlOutput('<h2>Något gick fel</h2><pre>' + String(e.message || e) + '</pre>');
+  }
+}
+
+function tokenRequest_(payload) {
+  var p = PropertiesService.getScriptProperties();
+  payload.client_id = p.getProperty('CLIENT_ID');
+  payload.client_secret = p.getProperty('CLIENT_SECRET');
+  var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', payload: payload, muteHttpExceptions: true });
+  var j = JSON.parse(r.getContentText() || '{}');
+  if (r.getResponseCode() !== 200) throw new Error('Token: ' + r.getResponseCode() + ' ' + (j.error_description || j.error || r.getContentText().slice(0, 200)));
+  return j;
+}
+
+function accessToken_() {
+  var c = CacheService.getScriptCache();
+  var at = c.get('AT');
+  if (at) return at;
+  var rt = PropertiesService.getScriptProperties().getProperty('REFRESH_TOKEN');
+  if (!rt) throw new Error('Inte godkänt ännu – kör setup i skriptet.');
+  var j = tokenRequest_({ refresh_token: rt, grant_type: 'refresh_token' });
+  c.put('AT', j.access_token, Math.max(60, (j.expires_in || 3600) - 120));
+  return j.access_token;
 }
 
 // Min Form anropar webbappen: ...exec?key=DIN_NYCKEL&days=14
@@ -58,12 +137,16 @@ function num_(v) { var n = Number(v); return isFinite(n) && n > 0 ? n : null; }
 
 function api_(type, filter) {
   var base = 'https://health.googleapis.com/v4/users/me/dataTypes/' + type + '/dataPoints';
-  var all = [], tok = '', guard = 0;
+  var all = [], tok = '', guard = 0, at = accessToken_();
   do {
     var url = base + '?pageSize=200&filter=' + encodeURIComponent(filter) + (tok ? '&pageToken=' + encodeURIComponent(tok) : '');
-    var r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    var r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + at }, muteHttpExceptions: true });
     var code = r.getResponseCode(), body = r.getContentText();
-    if (code !== 200) throw new Error(code + ' ' + body.slice(0, 300));
+    if (code !== 200) {
+      var msg = body.slice(0, 600);
+      try { var ej = JSON.parse(body).error; msg = ej.message + ' ' + JSON.stringify(ej.details || '').slice(0, 400); } catch (x) {}
+      throw new Error(code + ' ' + msg);
+    }
     var j = JSON.parse(body);
     all = all.concat(j.dataPoints || []);
     tok = j.nextPageToken || '';
@@ -77,7 +160,7 @@ function collect(days) {
   var e = ymd_(new Date(now.getTime() + 864e5));
   var out = { days: {}, exercises: [], errors: [] };
   function day(d) { return out.days[d] = out.days[d] || {}; }
-  function tryit(name, fn) { try { fn(); } catch (err) { out.errors.push(name + ': ' + String(err && err.message || err).slice(0, 300)); } }
+  function tryit(name, fn) { try { fn(); } catch (err) { out.errors.push(name + ': ' + String(err && err.message || err).slice(0, 500)); } }
 
   tryit('vilopuls', function () {
     api_('daily-resting-heart-rate', 'daily_resting_heart_rate.date >= "' + s + '" AND daily_resting_heart_rate.date < "' + e + '"').forEach(function (p) {
