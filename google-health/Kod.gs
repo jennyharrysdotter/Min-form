@@ -1,4 +1,4 @@
-// Min Form – klockdata från Google Health API (version 3 – med steg)
+// Min Form – klockdata från Google Health API (version 4 – med sömnfaser)
 // Kör i ditt eget Google-konto. Hämtar vilopuls, HRV, sömn och träningspass
 // och lämnar ut dem till Min Form bara om rätt nyckel skickas med.
 // Skriptet loggar in med en egen OAuth-klient som BARA har läsbehörighet
@@ -113,7 +113,7 @@ function doGet(e) {
     if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
   }
   var res;
-  try { res = collect(days); res.ok = true; res.at = new Date().toISOString(); }
+  try { res = collect(days); res.ok = true; res.v = 4; res.at = new Date().toISOString(); }
   catch (err) { res = { ok: false, error: String(err && err.message || err) }; }
   var txt = JSON.stringify(res);
   if (res.ok && txt.length < 90000) cache.put(ck, txt, 600);
@@ -180,8 +180,22 @@ function collect(days) {
       var x = p.sleep; if (!x || !x.interval) return;
       if (x.type && /NAP/i.test(String(x.type))) return;
       var d = dstr_(x.interval.civilEndTime) || ymd_(new Date(x.interval.endTime));
-      var m = num_(x.summary && x.summary.minutesAsleep);
-      if (d && m) { var o = day(d); o.sleepMin = Math.max(o.sleepMin || 0, Math.round(m)); }
+      var sm = x.summary || {};
+      var m = num_(sm.minutesAsleep);
+      if (d && m) {
+        var o = day(d);
+        if (!o.sleepMin || m > o.sleepMin) {
+          o.sleepMin = Math.round(m);
+          // sömnfaser för Min Forms egen sömnpoäng (huvudsömnen, längsta passet)
+          var sl = { awake: num_(sm.minutesAwake) || 0, period: num_(sm.minutesInSleepPeriod) || 0, fall: num_(sm.minutesToFallAsleep) || 0 };
+          (sm.stagesSummary || []).forEach(function (g) {
+            var t = String(g.type || '').toUpperCase(), mm = num_(g.minutes) || 0;
+            if (/DEEP/.test(t)) sl.deep = mm; else if (/REM/.test(t)) sl.rem = mm;
+            else if (/LIGHT/.test(t)) sl.light = mm; else if (/AWAKE|WAKE/.test(t)) sl.wakes = num_(g.count) || 0;
+          });
+          o.sl = sl;
+        }
+      }
     });
   });
   tryit('steg', function () {
